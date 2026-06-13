@@ -534,6 +534,7 @@ Useful generated artifacts after a successful sysbuild include:
 ## CI Build and Signing
 
 Block 4 adds a GitHub Actions workflow at `.github/workflows/build.yml`.
+After Block 5, that workflow builds the hardened release variant.
 
 The workflow does the same production build as the local Block 3 flow, but in a
 clean GitHub runner:
@@ -545,10 +546,10 @@ clean GitHub runner:
 4. Installs the project Python tools from `app/requirements.txt`.
 5. Writes the private signing key from the GitHub secret
    `MCUBOOT_SIGNING_KEY` to `app/keys/my-key.pem`.
-6. Builds the signed sysbuild image:
+6. Builds the signed release sysbuild image:
 
    ```bash
-   west build -b training app --sysbuild -d build/prod --pristine
+   west build -b training app/app --sysbuild -d build/prod --pristine -S release
    ```
 
 7. Verifies signing happened:
@@ -573,6 +574,93 @@ The uploaded artifact is named `training-firmware` and includes:
 - `build/prod/mcuboot/zephyr/zephyr.bin`
 - `build/prod/app/zephyr/zephyr.signed.bin`
 - `build/prod/app/zephyr/zephyr.elf`
+
+## Release Hardening
+
+Block 5 adds a Zephyr snippet named `release` under `snippets/release`.
+
+The snippet is registered automatically because `zephyr/module.yml` has:
+
+```yaml
+snippet_root: .
+```
+
+The snippet metadata is:
+
+```yaml
+name: release
+append:
+  EXTRA_CONF_FILE: release.conf
+  EXTRA_DTC_OVERLAY_FILE: release.overlay
+```
+
+### `snippets/release/release.conf`
+
+The release Kconfig turns off development affordances:
+
+```conf
+CONFIG_SHELL=n
+CONFIG_LOG=n
+CONFIG_ASSERT=n
+CONFIG_BOOT_BANNER=n
+CONFIG_PRINTK=n
+CONFIG_TEST_RANDOM_GENERATOR=n
+```
+
+It also folds in the hardenconfig recommendations accepted for this workshop
+app:
+
+```conf
+CONFIG_BUILD_OUTPUT_STRIPPED=y
+CONFIG_BUILTIN_STACK_GUARD=y
+CONFIG_FAULT_DUMP=0
+CONFIG_HW_STACK_PROTECTION=y
+CONFIG_OVERRIDE_FRAME_POINTER_DEFAULT=y
+CONFIG_STACK_SENTINEL=y
+```
+
+### `snippets/release/release.overlay`
+
+The release devicetree overlay changes the status LED to blue:
+
+```dts
+/ {
+	aliases {
+		led0 = &blue_led;
+	};
+};
+```
+
+The normal training overlay maps `led0` to green. The release snippet is applied
+after it, so the release build resolves `led0` to `blue_led`.
+
+Build the release image with:
+
+```bash
+west build -b training app --sysbuild -d build/release --pristine -S release
+```
+
+Run the app hardening audit with:
+
+```bash
+west build -d build/release/app -t hardenconfig
+```
+
+The current release app passes the local hardenconfig check without a remaining
+failure table.
+
+The measured app binary size changed from:
+
+```text
+build/signed/app/zephyr/zephyr.bin    74528 bytes
+build/release/app/zephyr/zephyr.bin   16364 bytes
+```
+
+The signed release app is:
+
+```text
+build/release/app/zephyr/zephyr.signed.bin
+```
 
 ## MCUboot Image Acceptance and Rollback
 
