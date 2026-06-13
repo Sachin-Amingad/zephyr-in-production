@@ -39,7 +39,7 @@ jobs:
           printf '%s' "$KEY_PEM" > app/keys/my-key.pem
 
       - name: Build signed firmware
-        run: west build -b training app --sysbuild -d build/prod --pristine
+        run: west build -b training app/app --sysbuild -d build/prod --pristine
 
       - name: Verify signed image
         run: imgtool verify -k app/keys/my-key.pem build/prod/app/zephyr/zephyr.signed.bin
