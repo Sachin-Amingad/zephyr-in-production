@@ -4,6 +4,7 @@ build*/
 
 # resources
 res/
+keys/
 
 # python
 .venv/

@@ -1,0 +1,54 @@
+name: build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: app
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Zephyr
+        uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: app
+          toolchains: arm-zephyr-eabi
+
+      - name: Install project Python tools
+        run: pip install -r app/requirements.txt
+
+      - name: Write signing key
+        env:
+          KEY_PEM: ${{ secrets.MCUBOOT_SIGNING_KEY }}
+        run: |
+          test -n "$KEY_PEM"
+          mkdir -p app/keys
+          printf '%s' "$KEY_PEM" > app/keys/my-key.pem
+
+      - name: Build signed firmware
+        run: west build -b training app --sysbuild -d build/prod --pristine
+
+      - name: Verify signed image
+        run: imgtool verify -k app/keys/my-key.pem build/prod/app/zephyr/zephyr.signed.bin
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-firmware
+          path: |
+            build/prod/mcuboot/zephyr/zephyr.bin
+            build/prod/app/zephyr/zephyr.signed.bin
+            build/prod/app/zephyr/zephyr.elf
